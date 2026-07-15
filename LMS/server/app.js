@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const fs = require("fs");
+const connectDB = require("./config/db");
 const { getUploadFilePath } = require("./utils/upload");
 
 const app = express();
@@ -27,6 +28,20 @@ app.get("/uploads/:filename", (req, res) => {
   }
 
   return res.sendFile(filePath);
+});
+
+app.use("/api", async (req, res, next) => {
+  const connected = await connectDB();
+
+  if (!connected) {
+    return res.status(500).json({
+      success: false,
+      error:
+        "Database connection failed. Check MONGO_URI and MongoDB Atlas Network Access.",
+    });
+  }
+
+  return next();
 });
 
 app.use("/api/users", require("./routes/users"));
