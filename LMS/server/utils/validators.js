@@ -24,7 +24,15 @@ exports.isValidGmailAddress = (email) => {
 
 /**
  * Normalizes a Gmail address for app-level uniqueness and lookup.
- * We only lowercase + trim it.
+ *
+ * Important:
+ * We only lowercase + trim the address.
+ * We DO NOT remove dots from the username because the application stores
+ * and authenticates using the exact address the user typed, and removing dots
+ * caused valid accounts like first.last@gmail.com to fail during login.
+ *
+ * @param {string} email - The Gmail address to normalize
+ * @returns {string|null} - Normalized Gmail address or null if invalid
  */
 exports.normalizeGmailAddress = (email) => {
   if (!exports.isValidGmailAddress(email)) return null;
