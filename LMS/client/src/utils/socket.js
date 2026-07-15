@@ -15,6 +15,8 @@ const getSocketUrl = () => {
   return window.location.origin;
 };
 
+const getSocketPath = () => import.meta.env.VITE_SOCKET_PATH || "/socket.io";
+
 export const getSocket = () => {
   const token = localStorage.getItem("token");
 
@@ -32,6 +34,7 @@ export const getSocket = () => {
 
   cachedToken = token;
   socketInstance = io(getSocketUrl(), {
+    path: getSocketPath(),
     transports: ["websocket"],
     auth: {
       token,
