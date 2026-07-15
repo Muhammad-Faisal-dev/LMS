@@ -1,41 +1,34 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { getMe } from "./features/auth/authSlice.jsx";
 
-// Layout Components
-import Header from "./components/layout/Header.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Footer from "./components/layout/Footer.jsx";
+import Header from "./components/layout/Header.jsx";
 
-// Pages
+import Dashboard from "./pages/Dashboard.jsx";
+import DebugPanel from "./pages/DebugPanel.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import Register from "./pages/Register.jsx";
+import Settings from "./pages/Settings.jsx";
+import Notifications from "./pages/Notifications.jsx";
 
-// Role-based Dashboards
 import AdminDashboard from "./pages/admin/Dashboard.jsx";
-import TeacherDashboard from "./pages/teacher/Dashboard.jsx";
-import StudentDashboard from "./pages/student/Dashboard.jsx";
-import StudentMessages from "./pages/student/Messages.jsx";
-import TeacherMessages from "./pages/teacher/Messages.jsx";
-
-// Course Pages
-import TeacherCourses from "./pages/teacher/Courses.jsx";
-import StudentCourses from "./pages/student/Courses.jsx";
-
-// Admin Pages
+import ManageCourses from "./pages/admin/ManageCourses.jsx";
+import ManageUsers from "./pages/admin/ManageUsers.jsx";
 import PendingApprovals from "./pages/admin/PendingApprovals.jsx";
 import SendMessage from "./pages/admin/SendMessage.jsx";
-import ManageUsers from "./pages/admin/ManageUsers.jsx";
-import ManageCourses from "./pages/admin/ManageCourses.jsx";
 
-// Protected Route
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import StudentCourses from "./pages/student/Courses.jsx";
+import StudentDashboard from "./pages/student/Dashboard.jsx";
+import StudentMessages from "./pages/student/Messages.jsx";
 
-// Extra debug panel for API testing
-import DebugPanel from "./pages/DebugPanel.jsx";
+import TeacherCourses from "./pages/teacher/Courses.jsx";
+import TeacherDashboard from "./pages/teacher/Dashboard.jsx";
+import TeacherMessages from "./pages/teacher/Messages.jsx";
 
 function App() {
   const dispatch = useDispatch();
@@ -46,17 +39,15 @@ function App() {
 
   return (
     <Router>
-      <div className="flex flex-col min-h-screen">
+      <div className="app-shell min-h-screen text-white">
         <Header />
-        <main className="flex-grow container mx-auto px-4 py-8">
+        <main className="flex-1">
           <Routes>
-            {/* Public Routes */}
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/debug" element={<DebugPanel />} />
 
-            {/* Generic Dashboard - Will redirect based on role */}
             <Route
               path="/dashboard"
               element={
@@ -65,8 +56,23 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Admin Routes */}
             <Route
               path="/admin"
               element={
@@ -108,7 +114,6 @@ function App() {
               }
             />
 
-            {/* Teacher Routes */}
             <Route
               path="/teacher"
               element={
@@ -134,7 +139,6 @@ function App() {
               }
             />
 
-            {/* Student Routes */}
             <Route
               path="/student"
               element={
@@ -160,7 +164,6 @@ function App() {
               }
             />
 
-            {/* Catch all - 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

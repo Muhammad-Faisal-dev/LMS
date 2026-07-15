@@ -6,14 +6,16 @@ const UserSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
+    trim: true,
   },
   email: {
     type: String,
     required: true,
     unique: true,
+    lowercase: true,
+    trim: true,
     validate: {
       validator: function (value) {
-        // Validate that the email is a properly formatted Gmail address
         return isValidGmailAddress(value);
       },
       message: "Please enter a valid Gmail address (example123@gmail.com)",
@@ -22,6 +24,7 @@ const UserSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
+    minlength: 6,
   },
   role: {
     type: String,
@@ -33,6 +36,47 @@ const UserSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
   },
+  cohort: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  phone: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  location: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  bio: {
+    type: String,
+    trim: true,
+    default: "",
+    maxlength: 500,
+  },
+  website: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  avatarUrl: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+  preferences: {
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    assignmentAlerts: {
+      type: Boolean,
+      default: true,
+    },
+  },
   isApproved: {
     type: Boolean,
     default: false,
@@ -43,7 +87,6 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
-// Hash password before saving
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
@@ -58,9 +101,8 @@ UserSchema.pre("save", async function (next) {
   }
 });
 
-// Match password method
 UserSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
 module.exports = mongoose.model("User", UserSchema);

@@ -1,186 +1,228 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
+import BrandLogo from "../components/ui/BrandLogo.jsx";
+import SectionCard from "../components/ui/SectionCard.jsx";
+import StatCard from "../components/ui/StatCard.jsx";
+import { getDashboardLink } from "../utils/ui.js";
+
+const featureCards = [
+  {
+    title: "Executive dashboards",
+    description:
+      "Beautiful role-based workspaces for admins, teachers, and students with metrics, shortcuts, and a polished visual hierarchy.",
+  },
+  {
+    title: "Course delivery",
+    description:
+      "Create courses, attach materials, publish assignments, and keep every lesson organized in a premium learning interface.",
+  },
+  {
+    title: "Messaging and approvals",
+    description:
+      "Approve new users, assign student cohorts, and communicate with targeted announcements that look production-ready.",
+  },
+];
+
+const roles = [
+  {
+    label: "Admin",
+    title: "Control the entire learning operation",
+    description:
+      "Approve users, manage courses, assign teachers, and track activity from one elegant command center.",
+  },
+  {
+    label: "Teacher",
+    title: "Run courses with confidence",
+    description:
+      "Upload materials, set assignments, monitor enrolled learners, and keep classes moving forward.",
+  },
+  {
+    label: "Student",
+    title: "Learn through a guided digital journey",
+    description:
+      "Track course progress, access resources, view deadlines, and stay updated through a focused inbox.",
+  },
+];
 
 const Home = () => {
   const { user } = useSelector((state) => state.auth);
-
-  const getDashboardLink = () => {
-    if (!user) return "/login";
-
-    switch (user.role) {
-      case "admin":
-        return "/admin";
-      case "teacher":
-        return "/teacher";
-      case "student":
-        return "/student";
-      default:
-        return "/dashboard";
-    }
-  };
+  const dashboardLink = getDashboardLink(user);
 
   return (
-    <div className="flex flex-col items-center">
-      {/* Hero Section */}
-      <section className="w-full py-12 md:py-24 bg-gradient-to-r from-primary-700 to-primary-900">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">
-            Learning Management System
-          </h1>
-          <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">
-            A comprehensive platform for students, teachers, and administrators
-            to manage educational content and communication.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4">
-            {!user ? (
-              <>
+    <div className="pb-12">
+      <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 lg:px-8 lg:pt-14">
+        <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+          <div>
+            <div className="inline-flex items-center gap-3 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100">
+              <span className="h-2 w-2 rounded-full bg-cyan-300" />
+              Premium LMS redesign ready for launch
+            </div>
+            <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+              Turn your LMS into a product people instantly trust.
+            </h1>
+            <p className="mt-6 max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
+              Your backend is already in place. This interface upgrades it into a polished learning platform with modern dashboards,
+              premium visuals, better UX, and workflows that feel ready for real users.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              {!user ? (
+                <>
+                  <Link
+                    to="/register"
+                    className="rounded-2xl bg-gradient-to-r from-cyan-400 via-sky-400 to-violet-500 px-6 py-3 text-sm font-semibold text-slate-950 shadow-xl shadow-cyan-500/20 transition hover:-translate-y-0.5"
+                  >
+                    Create account
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Sign in
+                  </Link>
+                </>
+              ) : (
                 <Link
-                  to="/login"
-                  className="bg-green-500 text-primary-700 hover:bg-green-700  px-6 py-3 rounded-md font-semibold shadow-md"
+                  to={dashboardLink}
+                  className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
                 >
-                  Login
+                  Open my dashboard
                 </Link>
-                <Link
-                  to="/register"
-                  className="bg-primary-600 hover:bg-primary-700 border border-white px-6 py-3 rounded-md font-semibold shadow-md"
-                >
-                  Register
-                </Link>
-              </>
-            ) : (
-              <Link
-                to={getDashboardLink()}
-                className="bg-white text-blue-700 hover:bg-gray-100 px-6 py-3 rounded-md font-semibold shadow-md"
-              >
-                Go to Dashboard
-              </Link>
-            )}
+              )}
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              <StatCard
+                label="Design language"
+                value="Premium"
+                hint="Glassmorphism, gradients, depth, and stronger structure."
+                accent="from-cyan-400 to-sky-500"
+                icon={<SparkIcon />}
+              />
+              <StatCard
+                label="LMS features"
+                value="Expanded"
+                hint="Assignments, cohort approvals, better course management."
+                accent="from-violet-500 to-fuchsia-500"
+                icon={<CubeIcon />}
+              />
+              <StatCard
+                label="Ready for demos"
+                value="Yes"
+                hint="Great for portfolio, internships, and client presentations."
+                accent="from-emerald-400 to-teal-500"
+                icon={<RocketIcon />}
+              />
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section className="w-full py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Features</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="bg-gray-50 rounded-lg p-6 shadow-md">
-              <div className="bg-primary-100 text-primary-600 p-3 rounded-full w-12 h-12 flex items-center justify-center mb-4">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  ></path>
-                </svg>
+          <div className="rounded-[34px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur-xl">
+            <BrandLogo />
+            <div className="mt-8 space-y-4">
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-400">Admin overview</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">1 dashboard, full control</p>
+                  </div>
+                  <div className="rounded-2xl bg-fuchsia-500/15 px-3 py-2 text-xs font-semibold text-fuchsia-200">
+                    Live analytics
+                  </div>
+                </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">Course Management</h3>
-              <p className="text-gray-600">
-                Create, organize, and manage courses with ease. Add materials,
-                assignments, and track student progress.
-              </p>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="bg-gray-50 rounded-lg p-6 shadow-md">
-              <div className="bg-primary-100 text-primary-600 p-3 rounded-full w-12 h-12 flex items-center justify-center mb-4">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  ></path>
-                </svg>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-sm text-slate-400">Teacher tools</p>
+                  <p className="mt-2 font-semibold text-white">Materials + assignments</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-400">Keep learning resources structured and publish deadlines clearly.</p>
+                </div>
+                <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-sm text-slate-400">Student journey</p>
+                  <p className="mt-2 font-semibold text-white">Progress tracking</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-400">Learners can track material completion and stay focused on outcomes.</p>
+                </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">Messaging System</h3>
-              <p className="text-gray-600">
-                Communicate effectively with targeted messaging to students,
-                teachers, or both groups simultaneously.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="bg-gray-50 rounded-lg p-6 shadow-md">
-              <div className="bg-primary-100 text-primary-600 p-3 rounded-full w-12 h-12 flex items-center justify-center mb-4">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  ></path>
-                </svg>
+              <div className="rounded-[28px] border border-cyan-400/20 bg-cyan-500/10 p-5 text-sm leading-7 text-cyan-100">
+                This version is focused on visual quality, clearer information architecture, and features that make the LMS feel closer to a real SaaS product.
               </div>
-              <h3 className="text-xl font-semibold mb-2">Role-Based Access</h3>
-              <p className="text-gray-600">
-                Secure role-based access control for administrators, teachers,
-                and students with unique IDs and approval system.
-              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="w-full py-16 bg-gray-50">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-6">Ready to Get Started?</h2>
-          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-            Join our learning management system today and experience a better
-            way to teach and learn.
+      <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
+        <SectionCard
+          title="Built for every role"
+          subtitle="Each user gets a dedicated workflow with a premium interface and meaningful actions."
+        >
+          <div className="grid gap-4 lg:grid-cols-3">
+            {roles.map((role) => (
+              <div key={role.label} className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+                <span className="inline-flex rounded-full bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                  {role.label}
+                </span>
+                <h3 className="mt-4 text-xl font-semibold text-white">{role.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{role.description}</p>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
+      <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {featureCards.map((feature) => (
+            <SectionCard key={feature.title} title={feature.title} className="h-full">
+              <p className="text-sm leading-7 text-slate-400">{feature.description}</p>
+            </SectionCard>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="rounded-[34px] border border-white/10 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-fuchsia-500/10 p-8 text-center shadow-2xl shadow-slate-950/20">
+          <h2 className="text-3xl font-semibold text-white">Make your LMS portfolio-worthy</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-slate-300">
+            The foundation is already good. With a stronger interface and better workflows, you can present it as a serious product to recruiters, clients, and the world.
           </p>
-          <div className="flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            <Link
+              to={user ? dashboardLink : "/register"}
+              className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+            >
+              {user ? "Go to my workspace" : "Start building"}
+            </Link>
             {!user ? (
-              <>
-                <Link
-                  to="/register"
-                  className="bg-blue-600 hover:bg-blue-700  px-6 py-3 rounded-md font-semibold shadow-md"
-                >
-                  Create an Account
-                </Link>
-                <Link
-                  to="/login"
-                  className="bg-white text-blue-700 hover:bg-gray-100 border border-blue-600 px-6 py-3 rounded-md font-semibold shadow-md"
-                >
-                  Login
-                </Link>
-              </>
-            ) : (
               <Link
-                to={getDashboardLink()}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-semibold shadow-md"
+                to="/login"
+                className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                Go to Dashboard
+                Existing user login
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </section>
     </div>
   );
 };
+
+const SparkIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 3l1.9 5.9H20l-4.8 3.5 1.8 5.8-5-3.6-5 3.6 1.8-5.8L4 8.9h6.1L12 3z" />
+  </svg>
+);
+
+const CubeIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3.3 7l8.7 5 8.7-5M12 22V12" />
+  </svg>
+);
+
+const RocketIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4.5 16.5c-1.5 1.5-1.5 4.5-1.5 4.5s3 0 4.5-1.5 1.5-4.5 1.5-4.5-3 0-4.5 1.5zm12-12L9 12l3 3 7.5-7.5a6.364 6.364 0 001.5-5.5 6.364 6.364 0 00-5.5 1.5z" />
+  </svg>
+);
 
 export default Home;

@@ -1,613 +1,695 @@
-import React, { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
-import axios from "axios";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import api from "../../utils/api";
+import DashboardShell from "../../components/ui/DashboardShell.jsx";
+import EmptyState from "../../components/ui/EmptyState.jsx";
+import LoadingState from "../../components/ui/LoadingState.jsx";
+import Modal from "../../components/ui/Modal.jsx";
+import SectionCard from "../../components/ui/SectionCard.jsx";
+import StatCard from "../../components/ui/StatCard.jsx";
+import StatusBadge from "../../components/ui/StatusBadge.jsx";
+import { formatDate } from "../../utils/ui.js";
+
+const teacherTabs = [
+  { label: "Overview", to: "/teacher" },
+  { label: "My courses", to: "/teacher/courses", active: true },
+  { label: "Messages", to: "/teacher/messages" },
+];
+
+const emptyMaterial = {
+  title: "",
+  description: "",
+  fileUrl: "",
+  messageContent: "",
+};
+
+const emptyAssignment = {
+  title: "",
+  description: "",
+  dueDate: "",
+  totalPoints: 100,
+};
 
 const TeacherCourses = () => {
   const [courses, setCourses] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { user, token } = useSelector((state) => state.auth);
-  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [error, setError] = useState("");
   const [materialModal, setMaterialModal] = useState(false);
+  const [assignmentModal, setAssignmentModal] = useState(false);
+  const [gradeModal, setGradeModal] = useState(false);
   const [materialType, setMaterialType] = useState("file");
-  const [materialData, setMaterialData] = useState({
-    title: "",
-    description: "",
-    fileUrl: "",
-    messageContent: "",
-  });
+  const [materialData, setMaterialData] = useState(emptyMaterial);
+  const [assignmentData, setAssignmentData] = useState(emptyAssignment);
+  const [gradeData, setGradeData] = useState({ grade: "", feedback: "", status: "graded" });
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [expandedCourses, setExpandedCourses] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadCourses = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await api.get("/courses");
+      const list = response.data.data || [];
+      setCourses(list);
+      setSelectedCourseId((current) => current || list[0]?._id || "");
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to load your courses.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true);
-        const config = {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        };
+    loadCourses();
+  }, [loadCourses]);
 
-        console.log("Fetching courses for teacher:", user?._id);
-        const response = await axios.get(
-          "http://localhost:5000/api/courses",
-          config
-        );
+  const filteredCourses = useMemo(() => {
+    const term = query.toLowerCase();
+    return courses.filter((course) =>
+      [course.title, course.code, course.description]
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  }, [courses, query]);
 
-        console.log("API response:", response.data);
+  const selectedCourse = useMemo(
+    () => filteredCourses.find((course) => course._id === selectedCourseId) || filteredCourses[0] || null,
+    [filteredCourses, selectedCourseId]
+  );
 
-        // Filter courses where this teacher is the instructor
-        let teacherCourses = [];
-        if (response.data.data && Array.isArray(response.data.data)) {
-          teacherCourses = response.data.data.filter((course) => {
-            // Check if instructor is a string (ID) or an object
-            const instructorId =
-              typeof course.instructor === "object"
-                ? course.instructor._id
-                : course.instructor;
-
-            // Compare with the logged-in teacher's ID
-            const isInstructor = instructorId === user._id;
-            console.log(
-              `Course ${course.title}: instructor=${instructorId}, user=${user._id}, match=${isInstructor}`
-            );
-            return isInstructor;
-          });
-        }
-
-        console.log("Filtered teacher courses:", teacherCourses);
-        setCourses(teacherCourses);
-
-        // Initialize expanded state
-        const initialExpandedState = {};
-        teacherCourses.forEach((course) => {
-          initialExpandedState[course._id] = false;
-        });
-        setExpandedCourses(initialExpandedState);
-      } catch (error) {
-        console.error("Error fetching courses:", error);
-        setError(
-          error.response?.data?.error ||
-            "An error occurred while fetching courses"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (user && token) {
-      fetchCourses();
-    } else {
-      setLoading(false);
-      setError("Please log in to view your courses");
+  const loadSubmissions = useCallback(async (courseId) => {
+    if (!courseId) {
+      setSubmissions([]);
+      return;
     }
-  }, [user, token]);
 
-  const handleInputChange = (e) => {
-    setMaterialData({
-      ...materialData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleFileChange = (e) => {
-    setUploadedFile(e.target.files[0]);
-  };
-
-  const handleMaterialTypeChange = (type) => {
-    setMaterialType(type);
-    if (type === "message") {
-      setUploadedFile(null);
+    try {
+      setSubmissionsLoading(true);
+      const response = await api.get(`/submissions/course/${courseId}`);
+      setSubmissions(response.data.data || []);
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to load course submissions.");
+    } finally {
+      setSubmissionsLoading(false);
     }
-  };
+  }, []);
 
-  const handleAddMaterial = async (courseId) => {
-    setSelectedCourse(courseId);
-    setMaterialModal(true);
-  };
+  useEffect(() => {
+    if (selectedCourse?._id) {
+      loadSubmissions(selectedCourse._id);
+    }
+  }, [loadSubmissions, selectedCourse?._id]);
 
-  const closeMaterialModal = () => {
-    setMaterialModal(false);
-    setMaterialData({
-      title: "",
-      description: "",
-      fileUrl: "",
-      messageContent: "",
-    });
+  const stats = useMemo(() => {
+    const students = courses.reduce((sum, course) => sum + (course.students?.length || 0), 0);
+    const materials = courses.reduce((sum, course) => sum + (course.materials?.length || 0), 0);
+    const assignments = courses.reduce((sum, course) => sum + (course.assignments?.length || 0), 0);
+
+    return [
+      <StatCard key="courses" label="Active courses" value={courses.length} hint="Courses currently under your supervision." accent="from-sky-400 to-cyan-500" icon={<CourseIcon />} />,
+      <StatCard key="students" label="Students" value={students} hint="Learners enrolled across your classes." accent="from-emerald-400 to-teal-500" icon={<PeopleIcon />} />,
+      <StatCard key="materials" label="Materials" value={materials} hint="Resources published to support learning." accent="from-amber-400 to-orange-500" icon={<FolderIcon />} />,
+      <StatCard key="assignments" label="Assignments" value={assignments} hint="Deadlines and activities created for students." accent="from-fuchsia-500 to-violet-500" icon={<AssignmentIcon />} />,
+    ];
+  }, [courses]);
+
+  const resetMaterialForm = () => {
+    setMaterialData(emptyMaterial);
+    setMaterialType("file");
     setUploadedFile(null);
     setUploadProgress(0);
   };
 
-  const toggleCourseExpansion = (courseId) => {
-    setExpandedCourses((prev) => ({
-      ...prev,
-      [courseId]: !prev[courseId],
-    }));
+  const closeMaterialModal = () => {
+    setMaterialModal(false);
+    resetMaterialForm();
   };
 
-  const submitMaterial = async (e) => {
-    e.preventDefault();
+  const closeAssignmentModal = () => {
+    setAssignmentModal(false);
+    setAssignmentData(emptyAssignment);
+  };
+
+  const closeGradeModal = () => {
+    setGradeModal(false);
+    setSelectedSubmission(null);
+    setGradeData({ grade: "", feedback: "", status: "graded" });
+  };
+
+  const addMaterial = async (event) => {
+    event.preventDefault();
+    if (!selectedCourse) return;
 
     try {
-      const config = {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      };
+      setSubmitting(true);
+      let fileUrl = materialData.fileUrl;
 
-      let finalMaterialData = {
+      if (materialType === "file" && uploadedFile) {
+        const form = new FormData();
+        form.append("file", uploadedFile);
+        const uploadResponse = await api.post("/upload", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (progressEvent) => {
+            const total = progressEvent.total || 1;
+            setUploadProgress(Math.round((progressEvent.loaded * 100) / total));
+          },
+        });
+        fileUrl = uploadResponse.data.fileUrl;
+      }
+
+      await api.post(`/courses/${selectedCourse._id}/materials`, {
         ...materialData,
         type: materialType,
-      };
+        fileUrl,
+      });
 
-      // Handle file upload if a file was selected
-      if (materialType === "file" && uploadedFile) {
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-
-        // Replace with your actual file upload endpoint
-        const uploadResponse = await axios.post(
-          "http://localhost:5000/api/upload",
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-              Authorization: `Bearer ${token}`,
-            },
-            onUploadProgress: (progressEvent) => {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
-              );
-              setUploadProgress(percentCompleted);
-            },
-          }
-        );
-
-        finalMaterialData.fileUrl = uploadResponse.data.fileUrl;
-      }
-
-      await axios.post(
-        `http://localhost:5000/api/courses/${selectedCourse}/materials`,
-        finalMaterialData,
-        config
-      );
-
-      // Refresh courses data
-      const coursesResponse = await axios.get(
-        "http://localhost:5000/api/courses",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      let teacherCourses = [];
-      if (
-        coursesResponse.data.data &&
-        Array.isArray(coursesResponse.data.data)
-      ) {
-        teacherCourses = coursesResponse.data.data.filter((course) => {
-          const instructorId =
-            typeof course.instructor === "object"
-              ? course.instructor._id
-              : course.instructor;
-          return instructorId === user._id;
-        });
-      }
-
-      setCourses(teacherCourses);
       closeMaterialModal();
-    } catch (error) {
-      console.error("Error adding material:", error);
-      setError(
-        error.response?.data?.error || "An error occurred while adding material"
-      );
+      await loadCourses();
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to add material.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  const addAssignment = async (event) => {
+    event.preventDefault();
+    if (!selectedCourse) return;
+
+    try {
+      setSubmitting(true);
+      await api.post(`/courses/${selectedCourse._id}/assignments`, assignmentData);
+      closeAssignmentModal();
+      await loadCourses();
+      await loadSubmissions(selectedCourse._id);
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to add assignment.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteAssignment = async (assignmentId) => {
+    if (!selectedCourse) return;
+    const confirmed = window.confirm("Delete this assignment?");
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/courses/${selectedCourse._id}/assignments/${assignmentId}`);
+      await loadCourses();
+      await loadSubmissions(selectedCourse._id);
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to delete assignment.");
+    }
+  };
+
+  const openGradeModal = (submission) => {
+    setSelectedSubmission(submission);
+    setGradeData({
+      grade: submission.grade ?? "",
+      feedback: submission.feedback || "",
+      status: submission.status === "graded" ? "graded" : "graded",
+    });
+    setGradeModal(true);
+  };
+
+  const saveGrade = async (event) => {
+    event.preventDefault();
+    if (!selectedSubmission) return;
+
+    try {
+      setSubmitting(true);
+      await api.put(`/submissions/${selectedSubmission._id}/grade`, gradeData);
+      closeGradeModal();
+      await loadSubmissions(selectedCourse?._id);
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to grade submission.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submissionsByAssignment = useMemo(() => {
+    return submissions.reduce((accumulator, submission) => {
+      if (!accumulator[submission.assignmentId]) {
+        accumulator[submission.assignmentId] = [];
+      }
+      accumulator[submission.assignmentId].push(submission);
+      return accumulator;
+    }, {});
+  }, [submissions]);
+
+  const detailTabs = [
+    { key: "overview", label: "Overview" },
+    { key: "materials", label: `Materials (${selectedCourse?.materials?.length || 0})` },
+    { key: "assignments", label: `Assignments (${selectedCourse?.assignments?.length || 0})` },
+    { key: "submissions", label: `Submissions (${submissions.length})` },
+    { key: "students", label: `Students (${selectedCourse?.students?.length || 0})` },
+  ];
+
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingState label="Loading your teaching workspace..." />;
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">My Teaching Courses</h1>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
-
-      {courses.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-gray-600">
-            You don't have any assigned courses yet.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {courses.map((course) => (
-            <div
-              key={course._id}
-              className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"
+    <>
+      <DashboardShell
+        role="teacher"
+        title="Course delivery workspace"
+        subtitle="Organize course materials, publish assignments, grade submissions, and review learners in one premium teaching interface."
+        tabs={teacherTabs}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setMaterialModal(true)}
+              disabled={!selectedCourse}
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <div
-                className="bg-blue-50 p-4 flex justify-between items-center cursor-pointer"
-                onClick={() => toggleCourseExpansion(course._id)}
-              >
-                <div>
-                  <h2 className="text-xl font-bold text-blue-800">
-                    {course.title}
-                  </h2>
-                  <p className="text-sm text-gray-500">{course.code}</p>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-sm mr-3">
-                    <span className="font-medium">
-                      {course.students?.length || 0}
-                    </span>{" "}
-                    students
-                  </span>
-                  <svg
-                    className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${
-                      expandedCourses[course._id] ? "rotate-180" : ""
-                    }`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 9l-7 7-7-7"
-                    ></path>
-                  </svg>
-                </div>
-              </div>
-
-              {expandedCourses[course._id] && (
-                <>
-                  <div className="p-6">
-                    <p className="text-gray-600 mb-4">{course.description}</p>
-
-                    {/* Course Materials Section */}
-                    <div className="mt-6 mb-6">
-                      <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-lg font-semibold">
-                          Course Materials
-                        </h3>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddMaterial(course._id);
-                          }}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded transition-colors"
-                        >
-                          Add Material
-                        </button>
-                      </div>
-
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        {course.materials && course.materials.length > 0 ? (
-                          <div className="space-y-3 divide-y divide-gray-200">
-                            {course.materials.map((material, idx) => (
-                              <div key={idx} className="pt-3 first:pt-0">
-                                <div className="flex justify-between">
-                                  <div>
-                                    <h4 className="font-medium">
-                                      {material.title}
-                                    </h4>
-                                    <p className="text-sm text-gray-600">
-                                      {material.description}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    {material.type !== "message" &&
-                                      material.fileUrl && (
-                                        <>
-                                          <a
-                                            href={material.fileUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 hover:text-blue-800 text-sm"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            View
-                                          </a>
-                                          <a
-                                            href={material.fileUrl}
-                                            download
-                                            className="text-green-600 hover:text-green-800 text-sm"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            Download
-                                          </a>
-                                        </>
-                                      )}
-                                  </div>
-                                </div>
-                                {material.messageContent && (
-                                  <div className="mt-2 bg-white p-3 rounded border border-gray-200 text-sm">
-                                    {material.messageContent}
-                                  </div>
-                                )}
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Added:{" "}
-                                  {new Date(
-                                    material.uploadedAt
-                                  ).toLocaleDateString()}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 text-sm text-center py-2">
-                            No materials added yet
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-6">
-                      <h3 className="text-lg font-semibold mb-3">Students</h3>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        {course.students && course.students.length > 0 ? (
-                          <div className="space-y-3">
-                            <div className="flex justify-between text-sm font-medium text-gray-500 px-2">
-                              <span>Name</span>
-                              <span>ID</span>
-                            </div>
-                            <div className="divide-y divide-gray-200">
-                              {Array.isArray(course.students) &&
-                                course.students.map((student, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex justify-between py-2 px-2"
-                                  >
-                                    <span className="text-sm">
-                                      {typeof student === "object"
-                                        ? student.name
-                                        : "Unknown"}
-                                    </span>
-                                    <span className="text-sm text-gray-500">
-                                      {typeof student === "object"
-                                        ? student.uniqueId
-                                        : "Unknown"}
-                                    </span>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 text-sm text-center py-2">
-                            No students enrolled
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between">
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Course Code:</span>{" "}
-                      {course.code}
-                    </div>
-                    <div className="space-x-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddMaterial(course._id);
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded transition-colors"
-                      >
-                        Add Materials
-                      </button>
-                      <button className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 px-4 rounded transition-colors">
-                        Manage Course
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Material Upload Modal */}
-      {materialModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-          <div
-            className="bg-white rounded-lg w-full max-w-lg p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Add Course Material</h3>
-              <button
-                onClick={closeMaterialModal}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  ></path>
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={submitMaterial}>
-              <div className="mb-4">
-                <div className="flex space-x-4 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => handleMaterialTypeChange("file")}
-                    className={`flex-1 py-2 px-4 rounded-md ${
-                      materialType === "file"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    Upload File
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMaterialTypeChange("message")}
-                    className={`flex-1 py-2 px-4 rounded-md ${
-                      materialType === "message"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    Send Message
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMaterialTypeChange("link")}
-                    className={`flex-1 py-2 px-4 rounded-md ${
-                      materialType === "link"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    Add Link
-                  </button>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Title
-                  </label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={materialData.title}
-                    onChange={handleInputChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Description
-                  </label>
-                  <input
-                    type="text"
-                    name="description"
-                    value={materialData.description}
-                    onChange={handleInputChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  />
-                </div>
-
-                {materialType === "file" && (
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Upload File
-                    </label>
-                    <input
-                      type="file"
-                      onChange={handleFileChange}
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    />
-                    {uploadProgress > 0 && (
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                        <div
-                          className="bg-blue-600 h-2.5 rounded-full"
-                          style={{ width: `${uploadProgress}%` }}
-                        ></div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {materialType === "link" && (
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      URL
-                    </label>
-                    <input
-                      type="url"
-                      name="fileUrl"
-                      value={materialData.fileUrl}
-                      onChange={handleInputChange}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      placeholder="https://"
-                      required
-                    />
-                  </div>
-                )}
-
-                {materialType === "message" && (
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Message
-                    </label>
-                    <textarea
-                      name="messageContent"
-                      value={materialData.messageContent}
-                      onChange={handleInputChange}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      rows="4"
-                      required
-                    ></textarea>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={closeMaterialModal}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                >
-                  Add Material
-                </button>
-              </div>
-            </form>
+              Add material
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignmentModal(true)}
+              disabled={!selectedCourse}
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Add assignment
+            </button>
+          </>
+        }
+        stats={stats}
+      >
+        {error ? (
+          <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            {error}
           </div>
-        </div>
-      )}
+        ) : null}
 
-      {/* Debug info */}
-      <div className="mt-8 p-4 border border-gray-300 rounded bg-gray-50">
-        <h3 className="text-sm font-bold mb-2">Debug Information:</h3>
-        <div className="text-xs font-mono whitespace-pre-wrap">
-          <p>User ID: {user?._id || "Not available"}</p>
-          <p>User Role: {user?.role || "Not available"}</p>
-          <p>Token available: {token ? "Yes" : "No"}</p>
-          <p>Courses count: {courses.length}</p>
-          <p>Course IDs: {courses.map((c) => c._id).join(", ")}</p>
-        </div>
-      </div>
-      
-    </div>
+        {courses.length === 0 ? (
+          <EmptyState
+            title="No teaching courses assigned"
+            description="You will see course management tools here after an administrator assigns you to a course."
+          />
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <SectionCard
+              title="Course list"
+              subtitle="Choose a course to manage its content, grading, and enrolled students."
+              action={
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search courses"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-sky-400/40 sm:w-72"
+                />
+              }
+            >
+              <div className="space-y-3">
+                {filteredCourses.map((course) => (
+                  <button
+                    key={course._id}
+                    type="button"
+                    onClick={() => setSelectedCourseId(course._id)}
+                    className={`w-full rounded-[24px] border p-4 text-left transition ${
+                      selectedCourse?._id === course._id
+                        ? "border-sky-400/40 bg-sky-500/10"
+                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{course.code}</p>
+                        <h3 className="mt-2 text-lg font-semibold text-white">{course.title}</h3>
+                      </div>
+                      <StatusBadge tone="info">{course.students?.length || 0} students</StatusBadge>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-400">{course.materials?.length || 0} materials • {course.assignments?.length || 0} assignments</p>
+                  </button>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title={selectedCourse?.title || "Course details"}
+              subtitle={selectedCourse ? `${selectedCourse.code} • ${selectedCourse.students?.length || 0} enrolled students` : "Select a course to manage it."}
+            >
+              {selectedCourse ? (
+                <div className="space-y-6">
+                  <div className="flex flex-wrap gap-3">
+                    {detailTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`rounded-2xl border px-4 py-2 text-sm font-medium transition ${
+                          activeTab === tab.key
+                            ? "border-sky-400/40 bg-sky-500/10 text-sky-100"
+                            : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.05]"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeTab === "overview" ? (
+                    <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                      <p className="max-w-2xl text-sm leading-7 text-slate-300">{selectedCourse.description}</p>
+                      <div className="mt-5 grid gap-4 sm:grid-cols-4">
+                        <MiniMetric label="Students" value={selectedCourse.students?.length || 0} />
+                        <MiniMetric label="Materials" value={selectedCourse.materials?.length || 0} />
+                        <MiniMetric label="Assignments" value={selectedCourse.assignments?.length || 0} />
+                        <MiniMetric label="Submissions" value={submissions.length} />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activeTab === "materials" ? (
+                    <SectionCard title="Published materials" subtitle="Share files, links, or direct notes for your students." className="border-white/5 bg-slate-950/20 p-5">
+                      {selectedCourse.materials?.length ? (
+                        <div className="space-y-4">
+                          {selectedCourse.materials.map((material, index) => (
+                            <article key={`${material.title}-${index}`} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <h3 className="font-semibold text-white">{material.title}</h3>
+                                    <StatusBadge tone="info">{material.type || "material"}</StatusBadge>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-7 text-slate-400">{material.description || "No description provided."}</p>
+                                </div>
+                                {material.fileUrl ? (
+                                  <a href={material.fileUrl} target="_blank" rel="noreferrer" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+                                    Open
+                                  </a>
+                                ) : null}
+                              </div>
+                              {material.messageContent ? (
+                                <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-300">
+                                  {material.messageContent}
+                                </div>
+                              ) : null}
+                              <p className="mt-3 text-xs text-slate-500">Added {formatDate(material.uploadedAt)}</p>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState title="No materials yet" description="Publish the first file, link, or note to start building this course." />
+                      )}
+                    </SectionCard>
+                  ) : null}
+
+                  {activeTab === "assignments" ? (
+                    <SectionCard title="Assignments" subtitle="Create structured deadlines and keep track of response volume." className="border-white/5 bg-slate-950/20 p-5">
+                      {selectedCourse.assignments?.length ? (
+                        <div className="space-y-4">
+                          {selectedCourse.assignments.map((assignment) => {
+                            const assignmentSubmissions = submissionsByAssignment[assignment._id] || [];
+                            const gradedCount = assignmentSubmissions.filter((item) => item.status === "graded").length;
+                            return (
+                              <article key={assignment._id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <h3 className="font-semibold text-white">{assignment.title}</h3>
+                                      <StatusBadge tone="warning">Due {formatDate(assignment.dueDate)}</StatusBadge>
+                                      <StatusBadge tone="info">{assignmentSubmissions.length} submitted</StatusBadge>
+                                      <StatusBadge tone="success">{gradedCount} graded</StatusBadge>
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-slate-400">{assignment.description || "No description added."}</p>
+                                    <p className="mt-3 text-sm text-slate-500">Total points: {assignment.totalPoints || 100}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteAssignment(assignment._id)}
+                                    className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <EmptyState title="No assignments yet" description="Create your first assignment so students can start preparing for deadlines." />
+                      )}
+                    </SectionCard>
+                  ) : null}
+
+                  {activeTab === "submissions" ? (
+                    <SectionCard title="Assignment submissions" subtitle="Review incoming student work and publish grades with feedback." className="border-white/5 bg-slate-950/20 p-5">
+                      {submissionsLoading ? (
+                        <LoadingState label="Loading submissions..." />
+                      ) : submissions.length ? (
+                        <div className="space-y-4">
+                          {submissions.map((submission) => (
+                            <article key={submission._id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <h3 className="font-semibold text-white">{submission.assignmentTitle}</h3>
+                                    <StatusBadge tone={submission.status === "graded" ? "success" : "info"}>
+                                      {submission.status}
+                                    </StatusBadge>
+                                  </div>
+                                  <p className="mt-2 text-sm text-slate-400">
+                                    {submission.student?.name} • {submission.student?.uniqueId || "No ID"}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">Submitted {formatDate(submission.submittedAt)}</p>
+                                  {submission.submissionText ? (
+                                    <p className="mt-3 text-sm leading-7 text-slate-300">{submission.submissionText}</p>
+                                  ) : null}
+                                  {submission.attachmentUrl ? (
+                                    <a href={submission.attachmentUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+                                      Open attachment
+                                    </a>
+                                  ) : null}
+                                  {submission.grade !== null && submission.grade !== undefined ? (
+                                    <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                                      Grade: {submission.grade} {submission.feedback ? `• Feedback: ${submission.feedback}` : ""}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openGradeModal(submission)}
+                                  className="rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                                >
+                                  {submission.status === "graded" ? "Update grade" : "Grade submission"}
+                                </button>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState title="No submissions yet" description="Student submissions will appear here as soon as assignments are turned in." />
+                      )}
+                    </SectionCard>
+                  ) : null}
+
+                  {activeTab === "students" ? (
+                    <SectionCard title="Enrolled students" subtitle="A quick list of learners currently assigned to this course." className="border-white/5 bg-slate-950/20 p-5">
+                      {selectedCourse.students?.length ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {selectedCourse.students.map((student) => (
+                            <div key={student._id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                              <p className="font-semibold text-white">{student.name}</p>
+                              <p className="mt-2 text-sm text-slate-400">{student.uniqueId || "No ID"}</p>
+                              <p className="mt-1 text-sm text-slate-500">Cohort: {student.cohort || "Not assigned"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState title="No students enrolled" description="Once a cohort or student is assigned to this course, the learner roster will appear here." />
+                      )}
+                    </SectionCard>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState title="Select a course" description="Choose a course from the list to manage materials, assignments, grading, and learners." />
+              )}
+            </SectionCard>
+          </div>
+        )}
+      </DashboardShell>
+
+      <Modal
+        open={materialModal}
+        onClose={closeMaterialModal}
+        title={`Add material${selectedCourse ? ` • ${selectedCourse.title}` : ""}`}
+        subtitle="Upload a file, share a link, or post a direct note inside the course."
+      >
+        <form onSubmit={addMaterial} className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: "File", value: "file" },
+              { label: "Link", value: "link" },
+              { label: "Message", value: "message" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setMaterialType(option.value)}
+                className={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${
+                  materialType === option.value
+                    ? "border-sky-400/40 bg-sky-500/10 text-sky-100"
+                    : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.05]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Title</span>
+            <input value={materialData.title} onChange={(event) => setMaterialData((prev) => ({ ...prev, title: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" required />
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Description</span>
+            <input value={materialData.description} onChange={(event) => setMaterialData((prev) => ({ ...prev, description: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" />
+          </label>
+
+          {materialType === "file" ? (
+            <label>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Upload file</span>
+              <input type="file" onChange={(event) => setUploadedFile(event.target.files?.[0] || null)} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-sky-500 file:px-3 file:py-2 file:font-semibold file:text-slate-950" />
+              {uploadProgress > 0 ? (
+                <div className="mt-3 h-2 rounded-full bg-white/10">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 to-cyan-400" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              ) : null}
+            </label>
+          ) : null}
+
+          {materialType === "link" ? (
+            <label>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Resource link</span>
+              <input type="url" value={materialData.fileUrl} onChange={(event) => setMaterialData((prev) => ({ ...prev, fileUrl: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" placeholder="https://example.com/resource" required />
+            </label>
+          ) : null}
+
+          {materialType === "message" ? (
+            <label>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Message</span>
+              <textarea value={materialData.messageContent} onChange={(event) => setMaterialData((prev) => ({ ...prev, messageContent: event.target.value }))} rows="5" className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" required />
+            </label>
+          ) : null}
+
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={closeMaterialModal} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting} className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-200 disabled:opacity-70">
+              {submitting ? "Publishing..." : "Publish material"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={assignmentModal}
+        onClose={closeAssignmentModal}
+        title={`Add assignment${selectedCourse ? ` • ${selectedCourse.title}` : ""}`}
+        subtitle="Set a clear deadline and points value so students know exactly what matters."
+      >
+        <form onSubmit={addAssignment} className="space-y-5">
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Assignment title</span>
+            <input value={assignmentData.title} onChange={(event) => setAssignmentData((prev) => ({ ...prev, title: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" required />
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Description</span>
+            <textarea value={assignmentData.description} onChange={(event) => setAssignmentData((prev) => ({ ...prev, description: event.target.value }))} rows="5" className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" />
+          </label>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Due date</span>
+              <input type="date" value={assignmentData.dueDate} onChange={(event) => setAssignmentData((prev) => ({ ...prev, dueDate: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" required />
+            </label>
+            <label>
+              <span className="mb-2 block text-sm font-medium text-slate-200">Total points</span>
+              <input type="number" min="1" value={assignmentData.totalPoints} onChange={(event) => setAssignmentData((prev) => ({ ...prev, totalPoints: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-sky-400/40" />
+            </label>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={closeAssignmentModal} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting} className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-200 disabled:opacity-70">
+              {submitting ? "Publishing..." : "Create assignment"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={gradeModal}
+        onClose={closeGradeModal}
+        title={selectedSubmission ? `Grade ${selectedSubmission.student?.name}` : "Grade submission"}
+        subtitle="Publish points and constructive feedback for the student's work."
+      >
+        <form onSubmit={saveGrade} className="space-y-5">
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Grade</span>
+            <input type="number" min="0" value={gradeData.grade} onChange={(event) => setGradeData((prev) => ({ ...prev, grade: event.target.value }))} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400/40" required />
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-slate-200">Feedback</span>
+            <textarea value={gradeData.feedback} onChange={(event) => setGradeData((prev) => ({ ...prev, feedback: event.target.value }))} rows="5" className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400/40" placeholder="Share what was done well and what can be improved." />
+          </label>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={closeGradeModal} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting} className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:opacity-70">
+              {submitting ? "Saving..." : "Save grade"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 };
+
+const MiniMetric = ({ label, value }) => (
+  <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+    <p className="text-sm text-slate-400">{label}</p>
+    <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+  </div>
+);
+
+const CourseIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13" />
+  </svg>
+);
+
+const PeopleIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0a5 5 0 00-10 0M15 7a3 3 0 11-6 0 3 3 0 016 0" />
+  </svg>
+);
+
+const FolderIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+  </svg>
+);
+
+const AssignmentIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M9 5h6m-6 4h6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h2.5a1.5 1.5 0 001.5 1h2a1.5 1.5 0 001.5-1H17a2 2 0 012 2v12a2 2 0 01-2 2z" />
+  </svg>
+);
 
 export default TeacherCourses;

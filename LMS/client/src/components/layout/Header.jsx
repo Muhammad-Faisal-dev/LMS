@@ -1,180 +1,150 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useSelector, useDispatch } from "react-redux";
+import React, { useMemo, useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../../features/auth/authSlice.jsx";
-import React from "react";
+import BrandLogo from "../ui/BrandLogo.jsx";
+import NotificationBell from "../notifications/NotificationBell.jsx";
+import ThemeToggle from "../ui/ThemeToggle.jsx";
+import { capitalize, getDashboardLink, getInitials } from "../../utils/ui.js";
 
 const Header = () => {
-  const navigate = useNavigate();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const dashboardLink = useMemo(() => getDashboardLink(user), [user]);
+
+  const mainLinks = user
+    ? [
+        { label: "Home", to: "/" },
+        { label: "Dashboard", to: dashboardLink },
+        { label: "Notifications", to: "/notifications" },
+        { label: "Settings", to: "/settings" },
+      ]
+    : [
+        { label: "Home", to: "/" },
+        { label: "Login", to: "/login" },
+        { label: "Register", to: "/register" },
+      ];
 
   const onLogout = () => {
     dispatch(logout());
     navigate("/");
+    setMobileOpen(false);
   };
 
-  const getDashboardLink = () => {
-    if (!user) return "/login";
-
-    switch (user.role) {
-      case "admin":
-        return "/admin";
-      case "teacher":
-        return "/teacher";
-      case "student":
-        return "/student";
-      default:
-        return "/dashboard";
-    }
-  };
-
-  // Helper function to safely capitalize the role
-  const capitalizeRole = (role) => {
-    return role && typeof role === "string"
-      ? role.charAt(0).toUpperCase() + role.slice(1)
-      : "";
-  };
+  const navClass = ({ isActive }) =>
+    `rounded-2xl px-4 py-2 text-sm font-medium transition ${
+      isActive
+        ? "bg-white/10 text-white"
+        : "text-slate-300 hover:bg-white/5 hover:text-white"
+    }`;
 
   return (
-    <header className="bg-primary-700  shadow-md">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex justify-between items-center">
-          <Link to="/" className="text-2xl font-bold ">
-            LMS
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <Link to="/" className="shrink-0">
+            <BrandLogo compact={false} />
           </Link>
 
-          <div className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="hover:text-primary-200">
-              Home
-            </Link>
+          <nav className="hidden items-center gap-2 xl:flex">
+            {mainLinks.map((link) => (
+              <NavLink key={link.to} to={link.to} className={navClass}>
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
 
+          <div className="hidden items-center gap-3 xl:flex">
+            <ThemeToggle />
+            {user ? <NotificationBell /> : null}
             {user ? (
               <>
                 <Link
-                  to={getDashboardLink()}
-                  className="hover:text-primary-200"
+                  to="/settings"
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 transition hover:bg-white/10"
                 >
-                  Dashboard
-                </Link>
-                <div className="relative group">
-                  <button className="flex items-center hover:text-primary-200">
-                    <span className="mr-1">{user.name}</span>
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                    </svg>
-                  </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 hidden group-hover:block">
-                    <div className="px-4 py-2 text-sm text-gray-700 border-b">
-                      <p className="font-medium">{user.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {capitalizeRole(user.role)}
-                      </p>
-                      {user.uniqueId && (
-                        <p className="text-xs text-gray-500">
-                          ID: {user.uniqueId}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={onLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Sign out
-                    </button>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500 font-semibold text-slate-950">
+                    {getInitials(user.name)}
                   </div>
-                </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{user.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {capitalize(user.role)}{user.uniqueId ? ` • ${user.uniqueId}` : ""}
+                    </p>
+                  </div>
+                </Link>
+                <button
+                  onClick={onLogout}
+                  className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+                >
+                  Logout
+                </button>
               </>
             ) : (
-              <>
-                <Link to="/login" className="hover:text-primary-200">
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="bg-primary-500 hover:bg-primary-600 px-4 py-2 rounded-md"
-                >
-                  Register
-                </Link>
-              </>
+              <Link
+                to="/register"
+                className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:translate-y-[-1px]"
+              >
+                Start now
+              </Link>
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-white focus:outline-none"
-            >
-              <svg className="h-6 w-6 fill-current" viewBox="0 0 24 24">
-                {isMenuOpen ? (
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M18.278 16.864a1 1 0 0 1-1.414 1.414l-4.829-4.828-4.828 4.828a1 1 0 0 1-1.414-1.414l4.828-4.829-4.828-4.828a1 1 0 0 1 1.414-1.414l4.829 4.828 4.828-4.828a1 1 0 1 1 1.414 1.414l-4.828 4.829 4.828 4.828z"
-                  />
-                ) : (
-                  <path
-                    fillRule="evenodd"
-                    d="M4 5h16a1 1 0 0 1 0 2H4a1 1 0 1 1 0-2zm0 6h16a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 6h16a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2z"
-                  />
-                )}
-              </svg>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((prev) => !prev)}
+            className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-3 text-slate-200 transition hover:bg-white/10 xl:hidden"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              {mobileOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
 
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden mt-4 pt-4 border-t border-primary-600">
-            <Link to="/" className="block py-2 hover:text-primary-200">
-              Home
-            </Link>
+        {mobileOpen ? (
+          <div className="mt-4 rounded-[28px] border border-white/10 bg-slate-900/95 p-4 xl:hidden">
+            <div className="mb-4 flex flex-wrap gap-3">
+              <ThemeToggle />
+              {user ? <NotificationBell /> : null}
+            </div>
+            <div className="space-y-2">
+              {mainLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/5"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
 
             {user ? (
-              <>
-                <Link
-                  to={getDashboardLink()}
-                  className="block py-2 hover:text-primary-200"
-                >
-                  Dashboard
-                </Link>
-                <div className="py-2">
-                  <div className="mb-2">
-                    <p className="font-medium">{user.name}</p>
-                    <p className="text-xs text-primary-200">
-                      {capitalizeRole(user.role)}
-                    </p>
-                    {user.uniqueId && (
-                      <p className="text-xs text-primary-200">
-                        ID: {user.uniqueId}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={onLogout}
-                    className="text-white hover:text-primary-200"
-                  >
-                    Sign out
-                  </button>
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <div className="mb-4 rounded-2xl bg-white/5 px-4 py-3">
+                  <p className="font-semibold text-white">{user.name}</p>
+                  <p className="text-sm text-slate-400">
+                    {capitalize(user.role)}{user.uniqueId ? ` • ${user.uniqueId}` : ""}
+                  </p>
                 </div>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="block py-2 hover:text-primary-200">
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="block py-2 hover:text-primary-200"
+                <button
+                  onClick={onLogout}
+                  className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950"
                 >
-                  Register
-                </Link>
-              </>
-            )}
+                  Logout
+                </button>
+              </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </header>
   );

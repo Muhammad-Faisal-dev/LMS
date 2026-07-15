@@ -1,20 +1,29 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import api from "../../utils/api";
+import { disconnectSocket } from "../../utils/socket";
 
-// Get user from localStorage
-const user = JSON.parse(localStorage.getItem("user"));
-const token = localStorage.getItem("token");
+const storedUser = localStorage.getItem("user");
+const storedToken = localStorage.getItem("token");
+
+const normalizeUser = (user) => {
+  if (!user) return null;
+
+  return {
+    ...user,
+    _id: user._id || user.id,
+    id: user.id || user._id,
+  };
+};
 
 const initialState = {
-  user: user || null,
-  token: token || null,
+  user: storedUser ? normalizeUser(JSON.parse(storedUser)) : null,
+  token: storedToken || null,
   isLoading: false,
   isError: false,
   isSuccess: false,
   message: "",
 };
 
-// Register user
 export const register = createAsyncThunk(
   "auth/register",
   async (userData, thunkAPI) => {
@@ -23,9 +32,8 @@ export const register = createAsyncThunk(
       return response.data;
     } catch (error) {
       const message =
-        (error.response &&
-          error.response.data &&
-          (error.response.data.error || error.response.data.message)) ||
+        error.response?.data?.error ||
+        error.response?.data?.message ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -33,85 +41,63 @@ export const register = createAsyncThunk(
   }
 );
 
-// Login user
-export const login = createAsyncThunk(
-  "auth/login",
-  async (userData, thunkAPI) => {
-    try {
-      const response = await api.post("/auth/login", userData);
-
-      if (response.data && response.data.token) {
-        // Ensure token doesn't have any whitespace or formatting issues
-        const cleanToken = response.data.token.trim();
-        localStorage.setItem("token", cleanToken);
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-        return {
-          user: response.data.user,
-          token: cleanToken,
-        };
-      }
-      return thunkAPI.rejectWithValue("No token received from server");
-    } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          (error.response.data.error || error.response.data.message)) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
-    }
-  }
-);
-
-// Get current user
-export const getMe = createAsyncThunk("auth/getMe", async (_, thunkAPI) => {
+export const login = createAsyncThunk("auth/login", async (userData, thunkAPI) => {
   try {
-    try {
-      // Try to fetch user from API
-      const response = await api.get("/auth/me");
-      return response.data.data;
-    } catch (apiError) {
-      console.log(
-        "API Error:",
-        apiError.response ? apiError.response.data : apiError.message
-      );
+    const response = await api.post("/auth/login", userData);
 
-      // If token is expired or invalid, clear local storage
-      if (apiError.response && apiError.response.status === 401) {
-        console.log("Authentication failed - clearing credentials");
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
-      }
-
-      // If the endpoint returns 404, use stored user data
-      if (apiError.response && apiError.response.status === 404) {
-        console.log("API endpoint not found, using stored user data");
-        const storedUser = JSON.parse(localStorage.getItem("user"));
-
-        if (storedUser) {
-          return storedUser;
-        }
-      }
-
-      // Rethrow for other errors
-      throw apiError;
+    if (!response.data?.token) {
+      return thunkAPI.rejectWithValue("No token received from server");
     }
+
+    const cleanToken = response.data.token.trim();
+    const user = normalizeUser(response.data.user);
+
+    localStorage.setItem("token", cleanToken);
+    localStorage.setItem("user", JSON.stringify(user));
+
+    return {
+      token: cleanToken,
+      user,
+    };
   } catch (error) {
     const message =
-      (error.response && error.response.data && error.response.data.error) ||
+      error.response?.data?.error ||
+      error.response?.data?.message ||
       error.message ||
       error.toString();
     return thunkAPI.rejectWithValue(message);
   }
 });
 
-// Logout user
+export const getMe = createAsyncThunk("auth/getMe", async (_, thunkAPI) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      return thunkAPI.rejectWithValue("No active session");
+    }
+
+    const response = await api.get("/auth/me");
+    const user = normalizeUser(response.data.data);
+    localStorage.setItem("user", JSON.stringify(user));
+    return user;
+  } catch (error) {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+
+    const message =
+      error.response?.data?.error || error.message || error.toString();
+    return thunkAPI.rejectWithValue(message);
+  }
+});
+
 export const logout = createAsyncThunk("auth/logout", async () => {
   localStorage.removeItem("user");
   localStorage.removeItem("token");
+  disconnectSocket();
 });
 
-export const authSlice = createSlice({
+const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
@@ -121,11 +107,17 @@ export const authSlice = createSlice({
       state.isError = false;
       state.message = "";
     },
+    setUser: (state, action) => {
+      state.user = normalizeUser(action.payload);
+      localStorage.setItem("user", JSON.stringify(state.user));
+    },
   },
   extraReducers: (builder) => {
     builder
       .addCase(register.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
+        state.message = "";
       })
       .addCase(register.fulfilled, (state, action) => {
         state.isLoading = false;
@@ -141,6 +133,8 @@ export const authSlice = createSlice({
       })
       .addCase(login.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
+        state.message = "";
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
@@ -161,8 +155,9 @@ export const authSlice = createSlice({
       .addCase(getMe.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload;
+        state.token = localStorage.getItem("token");
       })
-      .addCase(getMe.rejected, (state, action) => {
+      .addCase(getMe.rejected, (state) => {
         state.isLoading = false;
         state.user = null;
         state.token = null;
@@ -170,9 +165,10 @@ export const authSlice = createSlice({
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.token = null;
+        state.isSuccess = false;
       });
   },
 });
 
-export const { reset } = authSlice.actions;
+export const { reset, setUser } = authSlice.actions;
 export default authSlice.reducer;

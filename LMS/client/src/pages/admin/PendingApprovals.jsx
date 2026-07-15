@@ -1,362 +1,293 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
-import { useSelector } from "react-redux";
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import api from "../../utils/api";
+import DashboardShell from "../../components/ui/DashboardShell.jsx";
+import EmptyState from "../../components/ui/EmptyState.jsx";
+import LoadingState from "../../components/ui/LoadingState.jsx";
+import Modal from "../../components/ui/Modal.jsx";
+import SectionCard from "../../components/ui/SectionCard.jsx";
+import StatCard from "../../components/ui/StatCard.jsx";
+import StatusBadge from "../../components/ui/StatusBadge.jsx";
+import { formatDate } from "../../utils/ui.js";
+
+const adminTabs = [
+  { label: "Overview", to: "/admin" },
+  { label: "Pending approvals", to: "/admin/pending-approvals", active: true },
+  { label: "Manage users", to: "/admin/manage-users" },
+  { label: "Manage courses", to: "/admin/manage-courses" },
+  { label: "Send message", to: "/admin/send-message" },
+];
+
+const cohortOptions = ["Foundation", "Batch A", "Batch B", "Weekend", "Evening"];
 
 const PendingApprovals = () => {
-  const [pendingUsers, setPendingUsers] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [classes, setClasses] = useState([
-    { id: "class-a", name: "Class A" },
-    { id: "class-b", name: "Class B" },
-    { id: "class-c", name: "Class C" },
-  ]);
-  const [selectedClasses, setSelectedClasses] = useState({});
-  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
-  const { token } = useSelector((state) => state.auth);
+  const [selectedCohort, setSelectedCohort] = useState(cohortOptions[0]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadPendingUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await api.get("/users/pending");
+      setUsers(response.data.data || []);
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to load pending approvals.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchPendingUsers = async () => {
-      try {
-        setLoading(true);
-        const config = {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        };
+    loadPendingUsers();
+  }, [loadPendingUsers]);
 
-        const response = await axios.get(
-          "http://localhost:5000/api/users/pending",
-          config
-        );
-        setPendingUsers(response.data.data);
+  const filteredUsers = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    if (!search) return users;
 
-        // Initialize selected classes for each student
-        const initialSelectedClasses = {};
-        response.data.data.forEach((user) => {
-          if (user.role === "student") {
-            initialSelectedClasses[user._id] = "class-a"; // Default class
-          }
-        });
-        setSelectedClasses(initialSelectedClasses);
-      } catch (error) {
-        setError("Error fetching pending users");
-        console.error("Error fetching pending users:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    return users.filter((user) =>
+      [user.name, user.email, user.uniqueId, user.role].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(search)
+      )
+    );
+  }, [query, users]);
 
-    fetchPendingUsers();
-  }, [token]);
+  const counts = useMemo(
+    () => ({
+      total: users.length,
+      students: users.filter((user) => user.role === "student").length,
+      teachers: users.filter((user) => user.role === "teacher").length,
+    }),
+    [users]
+  );
 
-  const handleClassChange = (userId, classId) => {
-    setSelectedClasses({
-      ...selectedClasses,
-      [userId]: classId,
-    });
-  };
-
-  const initiateApproval = (user) => {
+  const openApproval = (user) => {
     setSelectedUser(user);
-    if (user.role === "student") {
-      setShowApproveModal(true);
-    } else {
-      approveUser(user._id);
-    }
+    setSelectedCohort(user.cohort || cohortOptions[0]);
   };
 
-  const approveUser = async (userId, classId = null) => {
+  const closeApproval = () => {
+    setSelectedUser(null);
+    setSelectedCohort(cohortOptions[0]);
+  };
+
+  const approveUser = async () => {
+    if (!selectedUser) return;
+
     try {
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-
-      // First approve the user
-      await axios.put(
-        `http://localhost:5000/api/users/${userId}/approve`,
-        {},
-        config
-      );
-
-      // If it's a student and class is selected, store the class assignment
-      if (classId) {
-        // In a real app, you'd have a proper API endpoint to assign a class
-        // For now, we'll just store it in localStorage for demonstration
-        const studentClasses = JSON.parse(
-          localStorage.getItem("studentClasses") || "{}"
-        );
-        studentClasses[userId] = classId;
-        localStorage.setItem("studentClasses", JSON.stringify(studentClasses));
-        console.log(`Student ${userId} assigned to class ${classId}`);
-      }
-
-      // Close modal if open
-      setShowApproveModal(false);
-      setSelectedUser(null);
-
-      // Remove approved user from the list
-      setPendingUsers(pendingUsers.filter((user) => user._id !== userId));
-    } catch (error) {
-      setError("Error approving user");
-      console.error("Error approving user:", error);
+      setSubmitting(true);
+      await api.put(`/users/${selectedUser._id}/approve`, {
+        cohort: selectedUser.role === "student" ? selectedCohort : "",
+      });
+      closeApproval();
+      await loadPendingUsers();
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to approve this user.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const deleteUser = async (userId) => {
-    if (window.confirm("Are you sure you want to delete this user?")) {
-      try {
-        const config = {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        };
+  const deleteUser = async (id) => {
+    const confirmed = window.confirm("Are you sure you want to delete this pending registration?");
+    if (!confirmed) return;
 
-        await axios.delete(`http://localhost:5000/api/users/${userId}`, config);
-
-        // Remove deleted user from the list
-        setPendingUsers(pendingUsers.filter((user) => user._id !== userId));
-      } catch (error) {
-        setError("Error deleting user");
-        console.error("Error deleting user:", error);
-      }
+    try {
+      await api.delete(`/users/${id}`);
+      await loadPendingUsers();
+    } catch (err) {
+      setError(err.response?.data?.error || "Unable to delete this user.");
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingState label="Loading pending approvals..." />;
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Pending Approvals</h1>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-red-400"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingUsers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <svg
-            className="w-16 h-16 text-gray-300 mx-auto mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
+    <>
+      <DashboardShell
+        role="admin"
+        title="Pending approval workflow"
+        subtitle="Approve incoming users, assign students to cohorts, and keep onboarding smooth with a cleaner management experience."
+        tabs={adminTabs}
+        actions={
+          <button
+            type="button"
+            onClick={loadPendingUsers}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
-          <p className="text-gray-500">No pending approvals at this time</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Name
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Email
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Role
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  ID
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Registered On
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Class
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {pendingUsers.map((user) => (
-                <tr key={user._id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {user.name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.role === "student"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
-                    >
-                      {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {user.uniqueId || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {new Date(user.registeredOn).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {user.role === "student" && (
-                      <select
-                        value={selectedClasses[user._id] || ""}
-                        onChange={(e) =>
-                          handleClassChange(user._id, e.target.value)
-                        }
-                        className="text-sm border border-gray-300 rounded px-2 py-1"
-                      >
-                        {classes.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            {cls.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => initiateApproval(user)}
-                      className="text-green-600 hover:text-green-900 mr-4"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => deleteUser(user._id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            Refresh queue
+          </button>
+        }
+        stats={[
+          <StatCard key="total" label="In queue" value={counts.total} hint="All users waiting for approval." accent="from-amber-400 to-orange-500" icon={<ClockIcon />} />,
+          <StatCard key="students" label="Students" value={counts.students} hint="Assign each one to a cohort before approval." accent="from-emerald-400 to-teal-500" icon={<StudentIcon />} />,
+          <StatCard key="teachers" label="Teachers" value={counts.teachers} hint="Approved teachers can immediately access their course tools." accent="from-cyan-400 to-sky-500" icon={<TeacherIcon />} />,
+        ]}
+      >
+        {error ? (
+          <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            {error}
+          </div>
+        ) : null}
 
-      {/* Approval Confirmation Modal for Students */}
-      {showApproveModal && selectedUser && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <h3 className="text-lg font-bold mb-4 text-teal-700 border-b pb-2">
-                Approve Student
-              </h3>
-              <p className="mb-4">
-                You are about to approve <strong>{selectedUser.name}</strong> as
-                a student. Please confirm the class assignment:
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Assign to Class:
-                </label>
+        <SectionCard
+          title="Approval queue"
+          subtitle="Search by name, email, role, or ID before approving or removing a registration."
+          action={
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search pending users"
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-fuchsia-400/40 sm:w-72"
+            />
+          }
+        >
+          {filteredUsers.length === 0 ? (
+            <EmptyState
+              title={users.length === 0 ? "Approval queue is clear" : "No users match your search"}
+              description={
+                users.length === 0
+                  ? "You have handled every registration for now. New requests will appear here automatically."
+                  : "Try another search term or clear the filter to see the full queue again."
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-[26px] border border-white/10">
+              <div className="hidden grid-cols-[1.2fr_1.3fr_0.7fr_0.8fr_0.8fr] gap-4 bg-white/[0.04] px-5 py-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 lg:grid">
+                <span>User</span>
+                <span>Email</span>
+                <span>Role</span>
+                <span>ID</span>
+                <span className="text-right">Actions</span>
+              </div>
+              <div className="divide-y divide-white/10">
+                {filteredUsers.map((user) => (
+                  <div key={user._id} className="grid gap-4 bg-white/[0.02] px-5 py-5 lg:grid-cols-[1.2fr_1.3fr_0.7fr_0.8fr_0.8fr] lg:items-center">
+                    <div>
+                      <p className="font-semibold text-white">{user.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">Registered {formatDate(user.registeredOn)}</p>
+                    </div>
+                    <p className="text-sm text-slate-300">{user.email}</p>
+                    <div>
+                      <StatusBadge tone={user.role === "student" ? "success" : user.role === "teacher" ? "info" : "danger"}>
+                        {user.role}
+                      </StatusBadge>
+                    </div>
+                    <p className="text-sm text-slate-400">{user.uniqueId || "Will be assigned"}</p>
+                    <div className="flex flex-wrap justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openApproval(user)}
+                        className="rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteUser(user._id)}
+                        className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </SectionCard>
+      </DashboardShell>
+
+      <Modal
+        open={Boolean(selectedUser)}
+        onClose={closeApproval}
+        title={selectedUser ? `Approve ${selectedUser.name}` : "Approve user"}
+        subtitle={
+          selectedUser?.role === "student"
+            ? "Choose a cohort so the student can be grouped for future course assignment."
+            : "Teacher and admin accounts can be approved immediately."
+        }
+        size="max-w-xl"
+      >
+        {selectedUser ? (
+          <div className="space-y-6">
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 className="text-lg font-semibold text-white">{selectedUser.name}</h3>
+                <StatusBadge tone={selectedUser.role === "student" ? "success" : selectedUser.role === "teacher" ? "info" : "danger"}>
+                  {selectedUser.role}
+                </StatusBadge>
+              </div>
+              <p className="mt-2 text-sm text-slate-400">{selectedUser.email}</p>
+              <p className="mt-1 text-sm text-slate-500">Registered {formatDate(selectedUser.registeredOn)}</p>
+            </div>
+
+            {selectedUser.role === "student" ? (
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-200">Student cohort</span>
                 <select
-                  value={selectedClasses[selectedUser._id] || ""}
-                  onChange={(e) =>
-                    handleClassChange(selectedUser._id, e.target.value)
-                  }
-                  className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500"
+                  value={selectedCohort}
+                  onChange={(event) => setSelectedCohort(event.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-fuchsia-400/40"
                 >
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
+                  {cohortOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowApproveModal(false);
-                    setSelectedUser(null);
-                  }}
-                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() =>
-                    approveUser(
-                      selectedUser._id,
-                      selectedClasses[selectedUser._id]
-                    )
-                  }
-                  className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700"
-                >
-                  Approve & Assign
-                </button>
-              </div>
+              </label>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeApproval}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={approveUser}
+                disabled={submitting}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-70"
+              >
+                {submitting ? "Approving..." : "Approve user"}
+              </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        ) : null}
+      </Modal>
+    </>
   );
 };
+
+const ClockIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const StudentIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 14l9-5-9-5-9 5 9 5zm0 0v6" />
+  </svg>
+);
+
+const TeacherIcon = () => (
+  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0a5 5 0 00-10 0m10 0v0M7 20H2v-2a3 3 0 015.356-1.857M15 7a3 3 0 11-6 0 3 3 0 016 0" />
+  </svg>
+);
 
 export default PendingApprovals;

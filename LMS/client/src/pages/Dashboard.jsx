@@ -1,37 +1,21 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import LoadingState from "../components/ui/LoadingState.jsx";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
 
   useEffect(() => {
-    // Redirect based on user role
-    if (user) {
-      switch (user.role) {
-        case "admin":
-          navigate("/admin");
-          break;
-        case "teacher":
-          navigate("/teacher");
-          break;
-        case "student":
-          navigate("/student");
-          break;
-        default:
-          // Stay on generic dashboard
-          break;
-      }
-    }
-  }, [user, navigate]);
+    if (!user) return;
 
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      <p>Welcome to the LMS Dashboard</p>
-    </div>
-  );
+    if (user.role === "admin") navigate("/admin", { replace: true });
+    if (user.role === "teacher") navigate("/teacher", { replace: true });
+    if (user.role === "student") navigate("/student", { replace: true });
+  }, [navigate, user]);
+
+  return <LoadingState label="Opening your dashboard..." />;
 };
 
 export default Dashboard;

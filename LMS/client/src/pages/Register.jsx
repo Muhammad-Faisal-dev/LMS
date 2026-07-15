@@ -1,29 +1,14 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useSelector, useDispatch } from "react-redux";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { register, reset } from "../features/auth/authSlice.jsx";
-import React from "react";
 
-// Gmail validator function
 const isValidGmailAddress = (email) => {
   if (!email) return false;
-
-  // Gmail validation regex
   const gmailRegex = /^[a-zA-Z0-9][a-zA-Z0-9.+_-]+@gmail\.com$/i;
-
-  // Basic validation
   if (!gmailRegex.test(email)) return false;
-
-  // Additional specific Gmail validations
   const username = email.split("@")[0];
-
-  // Cannot have consecutive dots
-  if (username.includes("..")) return false;
-
-  // Maximum length for Gmail username is 64 characters
-  if (username.length > 64) return false;
-
-  return true;
+  return !username.includes("..") && username.length <= 64;
 };
 
 const Register = () => {
@@ -35,266 +20,210 @@ const Register = () => {
     role: "student",
   });
   const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
-  const { name, email, password, confirmPassword, role } = formData;
   const navigate = useNavigate();
   const dispatch = useDispatch();
-
-  const { user, isLoading, isError, isSuccess, message } = useSelector(
-    (state) => state.auth
-  );
+  const { isLoading, isError, isSuccess, message } = useSelector((state) => state.auth);
 
   useEffect(() => {
-    if (isError) {
-      // Error is already handled in the component
-    }
-
-    // Redirect when registered
     if (isSuccess) {
       navigate("/login");
     }
 
-    dispatch(reset());
-  }, [user, isError, isSuccess, message, navigate, dispatch]);
+    return () => {
+      dispatch(reset());
+    };
+  }, [dispatch, isSuccess, navigate]);
 
-  const onChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      [name]: value,
-    }));
-
-    // Clear email error when user starts typing again
-    if (name === "email") {
-      setEmailError("");
-    }
+  const onChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "email") setEmailError("");
+    if (name === "password" || name === "confirmPassword") setPasswordError("");
   };
 
-  // Validate email when the field loses focus
   const validateEmail = () => {
-    if (email && !isValidGmailAddress(email)) {
-      setEmailError(
-        "Please enter a valid Gmail address (example123@gmail.com)"
-      );
+    if (formData.email && !isValidGmailAddress(formData.email)) {
+      setEmailError("Please enter a valid Gmail address.");
       return false;
     }
+
     setEmailError("");
     return true;
   };
 
-  const onSubmit = (e) => {
-    e.preventDefault();
+  const onSubmit = (event) => {
+    event.preventDefault();
 
-    // Validate email format first
-    if (!validateEmail()) {
+    if (!validateEmail()) return;
+
+    if (formData.password.length < 6) {
+      setPasswordError("Password should be at least 6 characters.");
       return;
     }
 
-    if (password !== confirmPassword) {
-      alert("Passwords do not match");
-    } else {
-      const userData = {
-        name,
-        email,
-        password,
-        role,
-      };
-
-      dispatch(register(userData));
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
     }
+
+    dispatch(
+      register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+      })
+    );
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh]">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h1 className="text-2xl font-bold text-center mb-6">
-            Create an Account
-          </h1>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-16">
+      <div className="grid overflow-hidden rounded-[36px] border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/30 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="relative overflow-hidden border-b border-white/10 p-8 lg:border-b-0 lg:border-r lg:p-12">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.2),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(34,211,238,0.18),_transparent_26%)]" />
+          <div className="relative">
+            <span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100">
+              Join the platform
+            </span>
+            <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white">
+              Create a polished LMS account experience.
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-slate-300">
+              Student and teacher accounts require admin approval, while the first admin account can unlock the whole system setup.
+            </p>
 
-          {isError && (
-            <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-red-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+            <div className="mt-10 grid gap-4">
+              {[
+                { title: "Students", text: "Receive cohort assignment, view courses, track materials and stay updated." },
+                { title: "Teachers", text: "Manage course delivery, upload materials and publish assignments." },
+                { title: "Admins", text: "Approve members, manage users and operate the complete LMS." },
+              ].map((item) => (
+                <div key={item.title} className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                  <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">{item.text}</p>
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700">{message}</p>
-                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-8 lg:p-12">
+          <div className="mx-auto max-w-xl">
+            <h2 className="text-2xl font-semibold text-white">Registration form</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Use a valid Gmail account and choose the right role for your LMS access.
+            </p>
+
+            {isError ? (
+              <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                {message}
               </div>
-            </div>
-          )}
+            ) : null}
 
-          {isSuccess && (
-            <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-green-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-green-700">
-                    Registration successful. Please wait for admin approval.
-                  </p>
-                </div>
+            {isSuccess ? (
+              <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                Registration successful. Please wait for admin approval before logging in.
               </div>
-            </div>
-          )}
+            ) : null}
 
-          <form onSubmit={onSubmit}>
-            <div className="mb-4">
-              <label
-                className="block text-gray-700 text-sm font-bold mb-2"
-                htmlFor="name"
-              >
-                Full Name
-              </label>
-              <input
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500"
-                id="name"
-                type="text"
-                name="name"
-                value={name}
-                onChange={onChange}
-                placeholder="Full Name"
-                required
-              />
-            </div>
-
-            <div className="mb-4">
-              <label
-                className="block text-gray-700 text-sm font-bold mb-2"
-                htmlFor="email"
-              >
-                Gmail Address <span className="text-red-500">*</span>
-              </label>
-              <input
-                className={`shadow appearance-none border ${
-                  emailError ? "border-red-500" : ""
-                } rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 ${
-                  emailError ? "focus:ring-red-500" : "focus:ring-primary-500"
-                }`}
-                id="email"
-                type="email"
-                name="email"
-                value={email}
-                onChange={onChange}
-                onBlur={validateEmail}
-                placeholder="example123@gmail.com"
-                required
-              />
-              {emailError && (
-                <p className="text-red-500 text-xs italic mt-1">{emailError}</p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                Only Gmail addresses are supported (example123@gmail.com)
-              </p>
-            </div>
-
-            <div className="mb-4">
-              <label
-                className="block text-gray-700 text-sm font-bold mb-2"
-                htmlFor="password"
-              >
-                Password
-              </label>
-              <input
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500"
-                id="password"
-                type="password"
-                name="password"
-                value={password}
-                onChange={onChange}
-                placeholder="Password"
-                required
-              />
-            </div>
-
-            <div className="mb-4">
-              <label
-                className="block text-gray-700 text-sm font-bold mb-2"
-                htmlFor="confirmPassword"
-              >
-                Confirm Password
-              </label>
-              <input
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500"
-                id="confirmPassword"
-                type="password"
-                name="confirmPassword"
-                value={confirmPassword}
-                onChange={onChange}
-                placeholder="Confirm Password"
-                required
-              />
-            </div>
-
-            <div className="mb-6">
-              <label
-                className="block text-gray-700 text-sm font-bold mb-2"
-                htmlFor="role"
-              >
-                Register as
-              </label>
-              <div className="relative">
-                <select
-                  className="block appearance-none w-full bg-white border border-gray-300 text-gray-700 py-2 px-3 pr-8 rounded leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  id="role"
-                  name="role"
-                  value={role}
+            <form onSubmit={onSubmit} className="mt-8 grid gap-5 sm:grid-cols-2">
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-medium text-slate-200">Full name</span>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
                   onChange={onChange}
+                  placeholder="Muhammad Faisal"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/50 focus:bg-white/[0.07]"
+                  required
+                />
+              </label>
+
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-medium text-slate-200">Gmail address</span>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={onChange}
+                  onBlur={validateEmail}
+                  placeholder="example123@gmail.com"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/50 focus:bg-white/[0.07]"
+                  required
+                />
+                {emailError ? <p className="mt-2 text-xs text-rose-200">{emailError}</p> : null}
+              </label>
+
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={onChange}
+                  placeholder="Minimum 6 characters"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/50 focus:bg-white/[0.07]"
+                  required
+                />
+              </label>
+
+              <label>
+                <span className="mb-2 block text-sm font-medium text-slate-200">Confirm password</span>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={onChange}
+                  placeholder="Repeat password"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/50 focus:bg-white/[0.07]"
+                  required
+                />
+              </label>
+
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-medium text-slate-200">Register as</span>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={onChange}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-emerald-400/50 focus:bg-white/[0.07]"
                 >
                   <option value="student">Student</option>
                   <option value="teacher">Teacher</option>
                   <option value="admin">Admin</option>
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                  <svg
-                    className="fill-current h-4 w-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                  </svg>
-                </div>
-              </div>
-              {role !== "admin" && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Note: {role === "student" ? "Student" : "Teacher"} accounts
-                  require admin approval before login.
+                <p className="mt-2 text-xs text-slate-400">
+                  {formData.role === "admin"
+                    ? "Only the first admin account can be created in the system."
+                    : `${formData.role === "student" ? "Student" : "Teacher"} accounts need approval before login.`}
                 </p>
-              )}
-            </div>
+              </label>
 
-            <div className="flex items-center justify-between">
+              {passwordError ? (
+                <div className="sm:col-span-2 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                  {passwordError}
+                </div>
+              ) : null}
+
               <button
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
                 type="submit"
-                disabled={isLoading || emailError}
+                disabled={isLoading || Boolean(emailError)}
+                className="sm:col-span-2 w-full rounded-2xl bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-500 px-4 py-3 font-semibold text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isLoading ? "Registering..." : "Register"}
+                {isLoading ? "Creating your account..." : "Create account"}
               </button>
-            </div>
-          </form>
+            </form>
+
+            <p className="mt-6 text-sm text-slate-400">
+              Already registered?{" "}
+              <Link to="/login" className="font-semibold text-emerald-300 hover:text-emerald-200">
+                Sign in here
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

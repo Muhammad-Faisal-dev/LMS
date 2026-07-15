@@ -22,92 +22,66 @@ const DebugPanel = () => {
       setResponse("");
       setError("");
 
-      let parsedBody;
-      try {
-        parsedBody = JSON.parse(requestBody);
-      } catch (e) {
-        setError("Invalid JSON in request body");
-        return;
+      let parsedBody = {};
+      if (method !== "GET") {
+        try {
+          parsedBody = JSON.parse(requestBody);
+        } catch {
+          setError("Invalid JSON in request body");
+          return;
+        }
       }
 
-      let result;
-      if (method === "GET") {
-        result = await axios.get(endpoint);
-      } else if (method === "POST") {
-        result = await axios.post(endpoint, parsedBody);
-      }
+      const result =
+        method === "GET"
+          ? await axios.get(endpoint)
+          : await axios.post(endpoint, parsedBody);
 
       setResponse(JSON.stringify(result.data, null, 2));
     } catch (err) {
-      console.error("Debug request error:", err);
       setError(
         `Error ${err.response?.status || ""}: ${
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message
+          err.response?.data?.message || err.response?.data?.error || err.message
         }`
       );
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 bg-gray-50 rounded shadow my-8">
-      <h2 className="text-xl font-bold mb-4">API Debug Panel</h2>
+    <div className="mx-auto my-8 max-w-4xl rounded-[28px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+      <h2 className="text-2xl font-semibold text-white">API Debug Panel</h2>
+      <p className="mt-2 text-sm text-slate-400">Use this utility for quick manual API checks during development.</p>
 
-      <div className="mb-4 flex gap-4">
-        <div className="flex-1">
-          <label className="block mb-2 font-medium">Method</label>
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="w-full p-2 border rounded"
-          >
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <label>
+          <span className="mb-2 block text-sm font-medium text-slate-200">Method</span>
+          <select value={method} onChange={(event) => setMethod(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none">
             <option value="GET">GET</option>
             <option value="POST">POST</option>
           </select>
-        </div>
-
-        <div className="flex-1">
-          <label className="block mb-2 font-medium">Endpoint</label>
-          <input
-            value={endpoint}
-            onChange={(e) => setEndpoint(e.target.value)}
-            className="w-full p-2 border rounded"
-          />
-        </div>
+        </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-slate-200">Endpoint</span>
+          <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none" />
+        </label>
       </div>
 
-      <div className="mb-4">
-        <label className="block mb-2 font-medium">Request Body (JSON)</label>
-        <textarea
-          value={requestBody}
-          onChange={(e) => setRequestBody(e.target.value)}
-          className="w-full p-2 border rounded font-mono text-sm h-40"
-        />
-      </div>
+      <label className="mt-4 block">
+        <span className="mb-2 block text-sm font-medium text-slate-200">Request body (JSON)</span>
+        <textarea value={requestBody} onChange={(event) => setRequestBody(event.target.value)} className="h-48 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none" />
+      </label>
 
-      <button
-        onClick={makeRequest}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mb-4"
-      >
-        Send Request
+      <button onClick={makeRequest} className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200">
+        Send request
       </button>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded">
-          <p className="font-medium text-red-800">Error:</p>
-          <p className="font-mono">{error}</p>
-        </div>
-      )}
+      {error ? (
+        <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{error}</div>
+      ) : null}
 
-      {response && (
-        <div>
-          <label className="block mb-2 font-medium">Response:</label>
-          <pre className="bg-gray-100 p-2 rounded border font-mono text-sm overflow-auto max-h-60">
-            {response}
-          </pre>
-        </div>
-      )}
+      {response ? (
+        <pre className="mt-4 overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-200">{response}</pre>
+      ) : null}
     </div>
   );
 };
